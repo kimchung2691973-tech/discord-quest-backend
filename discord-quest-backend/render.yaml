@@ -1,7 +1,10 @@
 services:
   - type: web
-    name: discord-quest-backend-1
-    runtime: python
-    runtimeVersion: 3.11.11
+    name: discord-quest-farmer
+    env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --worker-class eventlet -w 1 app:app
+    startCommand: python app.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+
