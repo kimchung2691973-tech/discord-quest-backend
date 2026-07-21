@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discord Quest Auto Farmer</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<style>
+:root{
+--bg:#0a0a0f;--bg2:#111118;--bg3:#181824;--card:#13131f;--hover:#1c1c2a;
+--border:#252538;--text:#e8e8f5;--dim:#6a6a8a;--fade:#4a4a5a;
+--cyan:#00d4ff;--green:#00e676;--yellow:#ffd600;--red:#ff5252;--magenta:#e040fb;--blue:#448aff;--orange:#ff9100;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,0.015)1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.015)1px,transparent 1px);background-size:50px 50px;pointer-events:none;z-index:0}
+.bg-glow{position:fixed;width:600px;height:600px;border-radius:50%;filter:blur(120px);opacity:0.08;pointer-events:none;z-index:0}
+.g1{top:-200px;right:-200px;background:var(--cyan)}
+.g2{bottom:-200px;left:-200px;background:var(--magenta)}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(40px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(0,212,255,0.2)}50%{box-shadow:0 0 40px rgba(0,212,255,0.4)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+
+/* TOKEN */
+.token-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.88);backdrop-filter:blur(16px);display:flex;align-items:center;justify-content:center;padding:20px}
+.token-overlay.hidden{display:none}
+.token-box{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:48px;width:100%;max-width:480px;animation:slideUp 0.6s ease-out;position:relative;overflow:hidden}
+.token-box::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--magenta),var(--cyan));background-size:200% 100%;animation:shimmer 3s infinite}
+.token-logo{text-align:center;margin-bottom:32px}
+.token-logo .icon{font-size:48px;margin-bottom:12px;display:block;animation:float 3s ease-in-out infinite}
+.token-logo h2{font-size:26px;font-weight:800;background:linear-gradient(135deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
+.token-logo p{color:var(--dim);font-size:13px}
+.token-input-wrap{position:relative;margin:24px 0 16px}
+.token-input{width:100%;padding:16px 48px 16px 18px;background:var(--bg2);border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none;transition:0.3s}
+.token-input:focus{border-color:var(--cyan);box-shadow:0 0 0 4px rgba(0,212,255,0.08)}
+.token-input::placeholder{color:var(--fade)}
+.token-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--dim);cursor:pointer;font-size:18px;padding:4px;transition:0.2s}
+.token-toggle:hover{color:var(--text)}
+.token-note{font-size:12px;color:var(--dim);line-height:1.7;margin-bottom:24px;padding:14px 16px;background:rgba(0,212,255,0.03);border-radius:10px;border-left:3px solid var(--cyan)}
+.token-note strong{color:var(--cyan)}
+.token-btn{width:100%;padding:16px;background:linear-gradient(135deg,var(--cyan),#0088cc);border:none;border-radius:12px;color:#000;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:0.3s;position:relative;overflow:hidden}
+.token-btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,212,255,0.25)}
+.token-btn:active{transform:translateY(0)}
+.token-btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+.token-btn .spinner{width:18px;height:18px;border:2px solid rgba(0,0,0,0.3);border-top-color:#000;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;vertical-align:middle;margin-right:10px}
+.token-error{display:none;align-items:center;gap:10px;padding:12px 16px;margin-bottom:16px;background:rgba(255,82,82,0.08);border:1px solid rgba(255,82,82,0.2);border-radius:10px;color:var(--red);font-size:13px;font-weight:500}
+.token-error.show{display:flex}
+
+/* DASHBOARD */
+.dashboard{display:none;position:relative;z-index:1}
+.dashboard.show{display:block}
+
+.header{background:rgba(10,10,15,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:14px 24px;position:sticky;top:0;z-index:100}
+.header-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+.header-brand{display:flex;align-items:center;gap:14px}
+.header-brand h1{font-size:20px;font-weight:800;background:linear-gradient(135deg,var(--cyan),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.header-badge{display:flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+.badge-on{background:rgba(0,230,118,0.1);color:var(--green);border:1px solid rgba(0,230,118,0.2)}
+.badge-off{background:rgba(255,82,82,0.1);color:var(--red);border:1px solid rgba(255,82,82,0.2)}
+.badge-run{background:rgba(255,214,0,0.1);color:var(--yellow);border:1px solid rgba(255,214,0,0.2)}
+
+.header-right{display:flex;align-items:center;gap:16px}
+.header-user{display:flex;align-items:center;gap:10px}
+.header-user-info{text-align:right}
+.header-user-name{font-weight:700;font-size:14px}
+.header-user-id{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--fade)}
+.header-avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--cyan),var(--magenta));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#000}
+.btn-change{padding:9px 16px;background:var(--hover);border:1px solid var(--border);border-radius:10px;color:var(--dim);font-size:12px;font-weight:600;cursor:pointer;transition:0.3s;font-family:inherit}
+.btn-change:hover{border-color:var(--cyan);color:var(--cyan);background:rgba(0,212,255,0.05)}
+
+.main{max-width:1400px;margin:0 auto;padding:24px}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+@media(max-width:1024px){.stats{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:600px){.stats{grid-template-columns:1fr}}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;transition:0.3s;position:relative;overflow:hidden;animation:fadeIn 0.5s ease-out}
+.stat:hover{border-color:rgba(0,212,255,0.2);transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+.stat::after{content:'';position:absolute;top:0;right:0;width:80px;height:80px;border-radius:50%;opacity:0.03;filter:blur(20px)}
+.stat-cyan::after{background:var(--cyan)}
+.stat-green::after{background:var(--green)}
+.stat-yellow::after{background:var(--yellow)}
+.stat-magenta::after{background:var(--magenta)}
+.stat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.stat-label{font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:0.8px}
+.stat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--bg2)}
+.stat-val{font-size:32px;font-weight:800;line-height:1;letter-spacing:-1px}
+.stat-desc{font-size:11px;color:var(--fade);margin-top:8px;font-weight:500}
+
+.controls{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:14px}
+.controls-left{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.toggle-box{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px}
+.toggle-switch{position:relative;width:44px;height:24px}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:var(--bg3);border-radius:24px;transition:0.3s}
+.toggle-slider::before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--fade);border-radius:50%;transition:0.3s}
+.toggle-switch input:checked+.toggle-slider{background:rgba(0,230,118,0.15)}
+.toggle-switch input:checked+.toggle-slider::before{transform:translateX(20px);background:var(--green)}
+.toggle-label{font-size:12px;font-weight:600;color:var(--dim)}
+
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border:none;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:0.3s;outline:none}
+.btn-start{background:rgba(0,230,118,0.1);color:var(--green);border:1px solid rgba(0,230,118,0.25)}
+.btn-start:hover{background:rgba(0,230,118,0.18);box-shadow:0 0 24px rgba(0,230,118,0.15)}
+.btn-stop{background:rgba(255,82,82,0.1);color:var(--red);border:1px solid rgba(255,82,82,0.25)}
+.btn-stop:hover{background:rgba(255,82,82,0.18);box-shadow:0 0 24px rgba(255,82,82,0.15)}
+.btn-refresh{background:var(--hover);color:var(--dim);border:1px solid var(--border)}
+.btn-refresh:hover{border-color:var(--cyan);color:var(--cyan)}
+
+.status-line{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--dim)}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--fade);transition:0.3s}
+.status-dot.on{background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 2s infinite}
+.status-dot.run{background:var(--yellow);box-shadow:0 0 12px var(--yellow);animation:pulse 1s infinite}
+.status-dot.err{background:var(--red);box-shadow:0 0 12px var(--red)}
+
+/* Quest Table */
+.quest-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:20px}
+.quest-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.quest-head h3{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
+.quest-head-right{display:flex;align-items:center;gap:12px}
+.quest-count{background:var(--bg3);color:var(--dim);padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700}
+
+.quest-table{width:100%;border-collapse:collapse}
+.quest-table th{padding:12px 16px;text-align:left;font-size:10px;font-weight:700;color:var(--fade);text-transform:uppercase;letter-spacing:0.6px;background:var(--bg3);border-bottom:1px solid var(--border)}
+.quest-table td{padding:14px 16px;font-size:12px;border-bottom:1px solid rgba(37,37,56,0.4);vertical-align:middle;animation:fadeIn 0.4s ease-out}
+.quest-table tr:hover{background:var(--hover)}
+.quest-table tr:last-child td{border-bottom:none}
+
+.q-name{display:flex;align-items:center;gap:12px}
+.q-icon{width:40px;height:40px;border-radius:10px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.q-info{display:flex;flex-direction:column;gap:2px}
+.q-info strong{font-weight:700;font-size:13px;color:var(--text)}
+.q-info small{font-family:'JetBrains Mono',monospace;color:var(--fade);font-size:10px}
+
+.q-type{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px}
+.t-video{background:rgba(68,138,255,0.08);color:var(--blue)}
+.t-desktop{background:rgba(0,212,255,0.08);color:var(--cyan)}
+.t-stream{background:rgba(255,145,0,0.08);color:var(--orange)}
+.t-activity{background:rgba(224,64,251,0.08);color:var(--magenta)}
+.t-mobile{background:rgba(0,230,118,0.08);color:var(--green)}
+
+.q-reward{color:var(--magenta);font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+
+.q-progress{min-width:160px}
+.q-progress-top{display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;font-weight:600}
+.q-progress-bar{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+.q-progress-fill{height:100%;border-radius:3px;transition:width 0.5s ease-out;position:relative}
+.q-progress-fill::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent);animation:shimmer 2s infinite}
+.fill-c{background:linear-gradient(90deg,var(--cyan),var(--blue))}
+.fill-g{background:linear-gradient(90deg,var(--green),#00c853)}
+.fill-y{background:linear-gradient(90deg,var(--yellow),#ffab00)}
+.fill-r{background:linear-gradient(90deg,var(--red),#ff1744)}
+
+.q-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700}
+.s-pending{background:rgba(255,214,0,0.08);color:var(--yellow)}
+.s-running{background:rgba(0,212,255,0.08);color:var(--cyan);animation:glow 2s infinite}
+.s-done{background:rgba(0,230,118,0.08);color:var(--green)}
+.s-error{background:rgba(255,82,82,0.08);color:var(--red)}
+.s-unclaimed{background:rgba(74,74,90,0.08);color:var(--fade)}
+
+/* Empty */
+.empty{text-align:center;padding:60px 20px}
+.empty-icon{font-size:56px;margin-bottom:16px;opacity:0.3;animation:float 4s ease-in-out infinite}
+.empty h4{font-size:16px;color:var(--dim);margin-bottom:8px;font-weight:700}
+.empty p{color:var(--fade);font-size:13px}
+
+/* Logs */
+.log-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.log-head{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.log-head h4{font-size:11px;font-weight:700;color:var(--fade);text-transform:uppercase;letter-spacing:0.6px}
+.log-btns{display:flex;gap:8px}
+.log-btn{background:none;border:none;color:var(--fade);cursor:pointer;font-size:12px;padding:5px 10px;border-radius:6px;transition:0.2s;font-family:inherit;font-weight:600}
+.log-btn:hover{background:var(--hover);color:var(--text)}
+.log-body{padding:12px 18px;max-height:280px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.8}
+.log-line{display:flex;gap:12px;padding:3px 0;border-bottom:1px solid rgba(37,37,56,0.25)}
+.log-line:last-child{border-bottom:none}
+.log-time{color:var(--fade);flex-shrink:0;min-width:64px;font-weight:500}
+.log-lvl{flex-shrink:0;min-width:52px;font-weight:700}
+.log-lvl.info{color:var(--blue)}
+.log-lvl.ok{color:var(--green)}
+.log-lvl.warn{color:var(--yellow)}
+.log-lvl.err{color:var(--red)}
+.log-msg{color:var(--dim);word-break:break-all}
+
+/* Toasts */
+.toasts{position:fixed;bottom:20px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px;box-shadow:0 12px 40px rgba(0,0,0,0.4);display:flex;align-items:center;gap:12px;min-width:300px;max-width:400px;animation:slideUp 0.4s ease-out}
+.toast.s{border-left:3px solid var(--green)}
+.toast.e{border-left:3px solid var(--red)}
+.toast.i{border-left:3px solid var(--blue)}
+.toast.w{border-left:3px solid var(--yellow)}
+.toast-icon{font-size:22px}
+.toast-title{font-weight:700;font-size:13px;margin-bottom:2px}
+.toast-desc{font-size:11px;color:var(--dim)}
+
+/* Connection status */
+.conn-status{padding:10px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;display:flex;align-items:center;gap:10px;font-size:13px}
+.conn-dot{width:10px;height:10px;border-radius:50%;background:var(--fade)}
+.conn-dot.connected{background:var(--green);animation:pulse 2s infinite}
+.conn-dot.disconnected{background:var(--red)}
+.conn-dot.connecting{background:var(--yellow);animation:pulse 1s infinite}
+
+@media(max-width:768px){
+.quest-table{display:block;overflow-x:auto}
+.controls{flex-direction:column;align-items:stretch}
+.header-inner{flex-wrap:wrap;gap:10px}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow g1"></div>
+<div class="bg-glow g2"></div>
+
+<!-- TOKEN MODAL -->
+<div class="token-overlay" id="tokOverlay">
+<div class="token-box">
+<div class="token-logo">
+<span class="icon">🚀</span>
+<h2>Discord Quest Farmer</h2>
+<p>Backend Powered — Auto complete quests</p>
+</div>
+<div class="token-error" id="tokErr">
+<span>⚠️</span>
+<span id="tokErrMsg">Token không hợp lệ</span>
+</div>
+<div class="token-input-wrap">
+<input type="password" class="token-input" id="tokIn" placeholder="Nhập Discord Token..." autocomplete="off">
+<button class="token-toggle" onclick="togVis()">👁️</button>
+</div>
+<div class="token-note">
+<strong>🔒 Backend Mode:</strong> Token gửi đến server backend để chạy Python tool thật. Quest game (PLAY_ON_DESKTOP) sẽ hoạt động đúng!
+</div>
+<button class="token-btn" id="tokBtn" onclick="subTok()">
+<span id="tokBtnTxt">🔑 Kết nối & Chạy</span>
+</button>
+</div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dashboard" id="dash">
+<header class="header">
+<div class="header-inner">
+<div class="header-brand">
+<h1>🚀 Quest Farmer</h1>
+<span class="header-badge badge-on" id="sysBadge"><span>●</span> Online</span>
+</div>
+<div class="header-right">
+<div class="header-user">
+<div class="header-user-info">
+<div class="header-user-name" id="uName">Backend Mode</div>
+<div class="header-user-id" id="uId">Python Engine</div>
+</div>
+<div class="header-avatar" id="uAvatar">🐍</div>
+</div>
+<button class="btn-change" onclick="showTok()">🔑 Đổi Token</button>
+</div>
+</div>
+</header>
+
+<main class="main">
+<!-- Connection Status -->
+<div class="conn-status" id="connStatus">
+<div class="conn-dot disconnected" id="connDot"></div>
+<span id="connText">🔌 Chưa kết nối backend — Nhập token để bắt đầu</span>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+<div class="stat stat-cyan">
+<div class="stat-top">
+<span class="stat-label">Tổng Quest</span>
+<div class="stat-icon" style="background:rgba(0,212,255,0.08);color:var(--cyan)">📋</div>
+</div>
+<div class="stat-val" id="sTotal" style="color:var(--cyan)">0</div>
+<div class="stat-desc">Quest khả dụng</div>
+</div>
+<div class="stat stat-yellow">
+<div class="stat-top">
+<span class="stat-label">Đang chạy</span>
+<div class="stat-icon" style="background:rgba(255,214,0,0.08);color:var(--yellow)">⚡</div>
+</div>
+<div class="stat-val" id="sRun" style="color:var(--yellow)">0</div>
+<div class="stat-desc">Đang xử lý</div>
+</div>
+<div class="stat stat-green">
+<div class="stat-top">
+<span class="stat-label">Hoàn thành</span>
+<div class="stat-icon" style="background:rgba(0,230,118,0.08);color:var(--green)">✅</div>
+</div>
+<div class="stat-val" id="sDone" style="color:var(--green)">0</div>
+<div class="stat-desc">Quest đã xong</div>
+</div>
+<div class="stat stat-magenta">
+<div class="stat-top">
+<span class="stat-label">Phần thưởng</span>
+<div class="stat-icon" style="background:rgba(224,64,251,0.08);color:var(--magenta)">🎁</div>
+</div>
+<div class="stat-val" id="sReward" style="color:var(--magenta)">0</div>
+<div class="stat-desc">Reward đã nhận</div>
+</div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+<div class="controls-left">
+<div class="toggle-box">
+<label class="toggle-switch">
+<input type="checkbox" id="togA" checked onchange="autoA=this.checked">
+<span class="toggle-slider"></span>
+</label>
+<span class="toggle-label">Auto Accept</span>
+</div>
+<div class="toggle-box">
+<label class="toggle-switch">
+<input type="checkbox" id="togC" checked onchange="autoC=this.checked">
+<span class="toggle-slider"></span>
+</label>
+<span class="toggle-label">Auto Complete</span>
+</div>
+<button class="btn btn-start" id="btnTog" onclick="togRun()">
+<span id="btnIco">▶</span>
+<span id="btnTxt">Bắt đầu Auto</span>
+</button>
+</div>
+<div class="status-line">
+<div class="status-dot" id="stDot"></div>
+<span id="stTxt">Sẵn sàng — Nhập token để bắt đầu</span>
+</div>
+</div>
+
+<!-- Quest Table -->
+<div class="quest-wrap">
+<div class="quest-head">
+<h3>📋 Danh sách Quest</h3>
+<div class="quest-head-right">
+<span class="quest-count" id="qCnt">0 quest</span>
+</div>
+</div>
+<div id="qWrap">
+<table class="quest-table">
+<thead>
+<tr>
+<th>Quest</th>
+<th>Loại</th>
+<th>Phần thưởng</th>
+<th>Tiến độ</th>
+<th>Trạng thái</th>
+</tr>
+</thead>
+<tbody id="qBody">
+<tr><td colspan="5">
+<div class="empty">
+<div class="empty-icon">📭</div>
+<h4>Chưa có dữ liệu</h4>
+<p>Nhập token và bấm "Kết nối & Chạy" để bắt đầu</p>
+</div>
+</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<!-- Logs -->
+<div class="log-wrap">
+<div class="log-head">
+<h4>📜 System Logs</h4>
+<div class="log-btns">
+<button class="log-btn" onclick="clrLog()">🗑️ Xóa</button>
+<button class="log-btn" onclick="cpyLog()">📋 Copy</button>
+</div>
+</div>
+<div class="log-body" id="logBody">
+<div class="log-line">
+<span class="log-time">--:--:--</span>
+<span class="log-lvl info">[INFO]</span>
+<span class="log-msg">Backend ready. Waiting for connection...</span>
+</div>
+</div>
+</div>
+</main>
+</div>
+
+<!-- Toasts -->
+<div class="toasts" id="toasts"></div>
+
+<script>
+// ==================== CONFIG ====================
+const SOCKET_URL = window.location.origin;
+
+// ==================== STATE ====================
+let socket = null;
+let connected = false;
+let running = false;
+let autoA = true;
+let autoC = true;
+let logs = [];
+let vis = false;
+let quests = [];
+
+// ==================== UTILS ====================
+function fmt(s) {
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+}
+function tIco(t) {
+    const i = { WATCH_VIDEO: "🎬", WATCH_VIDEO_ON_MOBILE: "📱", PLAY_ON_DESKTOP: "🎮", STREAM_ON_DESKTOP: "📺", PLAY_ACTIVITY: "🎯" };
+    return i[t] || "❓";
+}
+function tCls(t) {
+    const c = { WATCH_VIDEO: "t-video", WATCH_VIDEO_ON_MOBILE: "t-mobile", PLAY_ON_DESKTOP: "t-desktop", STREAM_ON_DESKTOP: "t-stream", PLAY_ACTIVITY: "t-activity" };
+    return c[t] || "";
+}
+function tLbl(t) {
+    const l = { WATCH_VIDEO: "Video", WATCH_VIDEO_ON_MOBILE: "Mobile", PLAY_ON_DESKTOP: "Desktop Game", STREAM_ON_DESKTOP: "Stream", PLAY_ACTIVITY: "Activity" };
+    return l[t] || t;
+}
+
+// ==================== LOGS ====================
+function log(lvl, msg) {
+    const t = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    logs.push({ t, lvl, msg });
+    if (logs.length > 300) logs.shift();
+    const b = document.getElementById('logBody');
+    const d = document.createElement('div');
+    d.className = 'log-line';
+    d.innerHTML = `<span class="log-time">${t}</span><span class="log-lvl ${lvl}">[${lvl.toUpperCase()}]</span><span class="log-msg">${msg}</span>`;
+    b.appendChild(d);
+    b.scrollTop = b.scrollHeight;
+}
+function clrLog() { logs = []; document.getElementById('logBody').innerHTML = ''; log('info', 'Logs cleared'); }
+function cpyLog() { navigator.clipboard.writeText(logs.map(l => `[${l.t}] [${l.lvl.toUpperCase()}] ${l.msg}`).join('\n')).then(() => toast('s', 'Đã copy', 'Logs copied to clipboard')); }
+
+// ==================== TOAST ====================
+function toast(type, title, desc) {
+    const c = document.getElementById('toasts');
+    const d = document.createElement('div');
+    d.className = `toast ${type}`;
+    const ic = { s: '✅', e: '❌', i: 'ℹ️', w: '⚠️' };
+    d.innerHTML = `<span class="toast-icon">${ic[type]}</span><div><div class="toast-title">${title}</div><div class="toast-desc">${desc}</div></div>`;
+    c.appendChild(d);
+    setTimeout(() => { d.style.opacity = '0'; d.style.transform = 'translateY(20px)'; setTimeout(() => d.remove(), 300); }, 4000);
+}
+
+// ==================== TOKEN ====================
+function togVis() { const i = document.getElementById('tokIn'); vis = !vis; i.type = vis ? 'text' : 'password'; }
+function showTok() { document.getElementById('tokOverlay').classList.remove('hidden'); document.getElementById('tokIn').value = ''; document.getElementById('tokErr').classList.remove('show'); }
+
+async function subTok() {
+    const tok = document.getElementById('tokIn').value.trim();
+    const err = document.getElementById('tokErr');
+    const btn = document.getElementById('tokBtn');
+    const txt = document.getElementById('tokBtnTxt');
+    if (!tok) { err.classList.add('show'); document.getElementById('tokErrMsg').textContent = 'Vui lòng nhập token!'; return; }
+    err.classList.remove('show');
+    btn.disabled = true;
+    txt.innerHTML = '<span class="spinner"></span> Đang kết nối...';
+
+    // Connect to backend
+    connectSocket(tok);
+}
+
+// ==================== SOCKET.IO ====================
+function connectSocket(token) {
+    log('info', 'Connecting to backend...');
+    socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+
+    socket.on('connect', () => {
+        connected = true;
+        log('ok', 'Connected to backend');
+        toast('s', 'Kết nối thành công', 'Backend Python đã kết nối');
+        updateConn('connected', '✅ Đã kết nối backend — Sẵn sàng chạy');
+        document.getElementById('tokOverlay').classList.add('hidden');
+        document.getElementById('dash').classList.add('show');
+
+        // Start quest runner
+        const sid = socket.id;
+        fetch('/api/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token, sid: sid, auto_accept: autoA, auto_complete: autoC })
+        }).then(r => r.json()).then(data => {
+            if (data.error) {
+                log('err', data.error);
+                toast('e', 'Lỗi', data.error);
+            } else {
+                log('ok', 'Quest runner started');
+                running = true;
+                updateBtn();
+            }
+        });
+    });
+
+    socket.on('disconnect', () => {
+        connected = false;
+        log('warn', 'Disconnected from backend');
+        updateConn('disconnected', '❌ Mất kết nối backend');
+        running = false;
+        updateBtn();
+    });
+
+    socket.on('log', (data) => {
+        log(data.level, data.msg);
+    });
+
+    socket.on('quests_update', (data) => {
+        quests = data.quests || [];
+        renderQuests();
+    });
+
+    socket.on('stats_update', (data) => {
+        document.getElementById('sTotal').textContent = data.total || 0;
+        document.getElementById('sRun').textContent = data.running || 0;
+        document.getElementById('sDone').textContent = data.completed || 0;
+        document.getElementById('sReward').textContent = data.rewards || 0;
+    });
+}
+
+function updateConn(status, text) {
+    const dot = document.getElementById('connDot');
+    const txt = document.getElementById('connText');
+    dot.className = `conn-dot ${status}`;
+    txt.textContent = text;
+}
+
+// ==================== UI ====================
+function renderQuests() {
+    const tbody = document.getElementById('qBody');
+    document.getElementById('qCnt').textContent = `${quests.length} quest`;
+    if (!quests.length) {
+        tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><div class="empty-icon">📭</div><h4>Chưa có quest</h4><p>Đang chờ backend fetch...</p></div></td></tr>';
+        return;
+    }
+    let html = '';
+    for (const q of quests) {
+        const pct = q.needed > 0 ? Math.min(100, Math.round((q.done / q.needed) * 100)) : 0;
+        let fcls = 'fill-c', scls = 's-pending', stxt = '⏳ Pending';
+        if (q.is_completed) { fcls = 'fill-g'; scls = 's-done'; stxt = '✅ Done'; }
+        else if (q.is_running) { fcls = 'fill-y'; scls = 's-running'; stxt = '⚡ Running'; }
+        else if (q.status === 'Error') { fcls = 'fill-r'; scls = 's-error'; stxt = '❌ Error'; }
+        else if (!q.is_enrolled) { scls = 's-unclaimed'; stxt = '🎁 Unclaimed'; }
+        html += `<tr><td><div class="q-name"><div class="q-icon">${tIco(q.task_type)}</div><div class="q-info"><strong>${q.name}</strong><small>${q.qid}</small></div></div></td><td><span class="q-type ${tCls(q.task_type)}">${tLbl(q.task_type)}</span></td><td><div class="q-reward" title="${q.reward}">${q.reward}</div></td><td class="q-progress"><div class="q-progress-top"><span style="color:var(--dim)">${fmt(q.done)} / ${fmt(q.needed)}</span><span style="color:var(--cyan);font-weight:800">${pct}%</span></div><div class="q-progress-bar"><div class="q-progress-fill ${fcls}" style="width:${pct}%"></div></div></td><td><span class="q-status ${scls}">${stxt}</span></td></tr>`;
+    }
+    tbody.innerHTML = html;
+}
+
+function updateBtn() {
+    const btn = document.getElementById('btnTog');
+    const ico = document.getElementById('btnIco');
+    const txt = document.getElementById('btnTxt');
+    if (running) {
+        btn.className = 'btn btn-stop'; ico.textContent = '⏹'; txt.textContent = 'Dừng Auto';
+        updSt('run', 'Auto đang chạy...');
+    } else {
+        btn.className = 'btn btn-start'; ico.textContent = '▶'; txt.textContent = 'Bắt đầu Auto';
+        updSt('ready', 'Sẵn sàng');
+    }
+}
+
+function updSt(type, text) {
+    const d = document.getElementById('stDot');
+    const t = document.getElementById('stTxt');
+    const b = document.getElementById('sysBadge');
+    d.className = 'status-dot';
+    if (type === 'ready') { d.classList.add('on'); b.className = 'header-badge badge-on'; b.innerHTML = '<span>●</span> Ready'; }
+    else if (type === 'run') { d.classList.add('run'); b.className = 'header-badge badge-run'; b.innerHTML = '<span>●</span> Running'; }
+    else if (type === 'err') { d.classList.add('err'); b.className = 'header-badge badge-off'; b.innerHTML = '<span>●</span> Error'; }
+    t.textContent = text;
+}
+
+function togRun() {
+    if (running) {
+        fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid: socket.id }) });
+        running = false;
+        log('info', '⏹ Auto stopped');
+        toast('i', 'Đã dừng', 'Auto quest đã tạm dừng');
+    } else {
+        log('info', '▶ Auto started');
+        toast('s', 'Auto chạy', 'Bắt đầu auto quest');
+        running = true;
+    }
+    updateBtn();
+}
+
+// ==================== INIT ====================
+document.getElementById('tokIn').addEventListener('keypress', e => { if (e.key === 'Enter') subTok(); });
+log('info', '🚀 Backend Web UI loaded. Waiting for token...');
+</script>
+</body>
+</html>
